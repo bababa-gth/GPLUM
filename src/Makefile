@@ -5,8 +5,8 @@ INC = -I$(PS_PATH_FDPS) -I$(PS_PATH_PIKG)inc
 ####################
 ###   Compiler   ###
 ####################
-CC = clang++ -std=c++11
-#CC = mpic++ -std=c++11
+#CC = clang++ -std=c++11
+CC = mpic++ -std=c++17
 #CC = time FCCpx -Nclang
 #CC = time mpiFCCpx -Nclang
 
@@ -26,16 +26,17 @@ CC = clang++ -std=c++11
 #########################
 ###   Other Options   ###
 #########################
-individual_cutoff = yes
-quadrupole = yes
+#individual_cutoff = yes
+#quadrupole = yes
 #polar_coordinate = yes
 #isotropic = yes
-#gas_drag = yes
+gas_drag = yes
+gas_dragEx = yes
 #integrate_6th = yes
 #absorb_particle = yes
 #test_particle = yes
 
-collision = yes
+#collision = yes
 #Kominami = yes
 #Chembers = yes
 #Shibata = yes
@@ -44,7 +45,6 @@ collision = yes
 #without_sun = yes
 #constant_random_velocity = yes
 #correct_interaction_gravity = yes
-
 output_detail = yes
 #calc_time = yes
 
@@ -52,7 +52,7 @@ p2p_fast = yes
 
 
 CFLAGS = -O2
-CFLAGS += -Wall
+#CFLAGS += -Wall
 CFLAGS += -funroll-loops
 
 CFLAGS += -DFOR_PIKG01
@@ -104,6 +104,7 @@ endif
 ifeq ($(gas_drag),yes)
 CFLAGS += -DGAS_DRAG
 endif
+
 ifeq ($(integrate_6th),yes)
 CFLAGS += -DINTEGRATE_6TH_SUN
 endif
@@ -158,6 +159,15 @@ CFLAGS += -DMONAR
 SRC = main_p3t.cpp
 PROGRAM = gplum.out
 HEADER = mathfunc.h kepler.h energy.h particle.h disk.h gravity.h gravity_kernel.hpp collisionA.h collisionB.h hermite.h hard.h read.h time.h func.h
+
+#>>>>>>>>> {Extension by S.Shibata in 3.2022
+ifeq ($(gas_dragEx),yes)
+CFLAGS += -DGAS_DRAGEX
+endif
+
+HEADER += diskEx.h
+
+#>>>>>>>>> }
 
 
 $(PROGRAM): $(SRC) gravity_kernel_epep.hpp gravity_kernel_epsp.hpp

@@ -293,6 +293,29 @@ PS::S32 readParameter(const char * param_file,
             seed = std::atoi(value.c_str());
         } else if ( name == "reset_step" ){
             reset_step = std::atoi(value.c_str());
+
+        //////{ add by S.Shibata in 3.2020
+
+        } else if ( name == "DF_setting"){
+            DragForce::setting = getvalue(value, 1., 1.);
+        } else if ( name == "DP_SigmaGas0_cgs" ){
+            DiskProperty::SigmaGas0_cgs = getvalue(value, 1., 1.);
+            DiskProperty::SigmaGas0 = DiskProperty::SigmaGas0_cgs *(1./M_CGS)/pow(1./L_CGS, 2.);
+        } else if ( name == "DP_Tmid0_K" ){
+            DiskProperty::Tmid0_K = getvalue(value, 1., 1.);
+            DiskProperty::Tmid0 = DiskProperty::Tmid0_K;
+        } else if ( name == "DP_alpha_gas" ){
+            DiskProperty::alpha_gas = getvalue(value, 1., 1.);
+        } else if ( name == "DP_beta_gap" ){
+            DiskProperty::beta_gas = getvalue(value, 1., 1.);
+        } else if ( name == "DP_Cd" ){
+            DiskProperty::Cd = getvalue(value, 1., 1.);
+        } else if ( name == "DP_mu" ){
+            DiskProperty::mu = getvalue(value, 1., 1.);
+        } else if ( name == "DP_alpha_vis" ){
+            DiskProperty::alpha_vis = getvalue(value, 1., 1.);
+
+        //////}
         }
         Collision::readParameter(name, value);
     }

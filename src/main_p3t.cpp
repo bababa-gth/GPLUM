@@ -44,6 +44,9 @@ using FPH_t = FPHard;
 #include "energy.h"
 #include "neighbor.h"
 #include "disk.h"
+// Extension by Shibata in 3.2022
+#include "diskEx.h"
+//
 #include "gravity_hard.h"
 #include "gravity_soft.h"
 #include "collisionA.h"
@@ -55,6 +58,8 @@ using FPH_t = FPHard;
 #include "func.h"
 #include "gravity_kernel_epep.hpp"
 #include "gravity_kernel_epsp.hpp"
+
+
 
 #ifdef USE_INDIVIDUAL_CUTOFF
 using MY_SEARCH_MODE = PS::SEARCH_MODE_LONG_SYMMETRY;
@@ -70,7 +75,7 @@ using Tree_t = PS::TreeForForce<MY_SEARCH_MODE, Force_t, EPI_t, EPJ_t, Moment_t,
 
 int main(int argc, char *argv[])
 {
-    PS::Initialize(argc, argv); 
+    PS::Initialize(argc, argv); /* Initialize FDPS */
     showGplumVersion(GPLUMVERSION);
     //PS::Comm::barrier();
     time_t wtime_start_program = time(NULL);
@@ -82,6 +87,7 @@ int main(int argc, char *argv[])
     char param_file[256] = "parameter.dat";
     
     char init_file[256] = "INIT_3000.dat";
+    
     char output_dir[256] = "OUTPUT";
     bool bHeader  = false;
     bool bRestart = false;
@@ -236,8 +242,8 @@ int main(int argc, char *argv[])
     PS::S32 n_tot  = 0;
     PS::F64 de_max = 0.;
     PS::F64 de_d_cum = 0.;
-    PS::S32 istep     = 0;
-    PS::S32 isnap     = 0;
+    PS::S64 istep     = 0;  /*  PS::S32 istep     = 0;  use unsigned long long */
+    PS::S64 isnap     = 0;  /*  PS::S32 isnap     = 0; */
     PS::S32 n_col_tot  = 0;
     PS::S32 n_frag_tot = 0;
     
@@ -274,8 +280,10 @@ int main(int argc, char *argv[])
                 PS::F64 dt_tree = FP_t::dt_tree;
                 system_grav.readParticleAscii(init_file, header);
                 if ( PS::Comm::getRank() == 0 ){
-                    istep = (PS::S32)round(header.time/dt_tree);
-                    isnap = (PS::S32)round(header.time/dt_snap);
+                    /*istep = (PS::S32)round(header.time/dt_tree); */
+                    /*isnap = (PS::S32)round(header.time/dt_snap); */
+                    istep = (PS::S64)lround(header.time/dt_tree);
+                    isnap = (PS::S64)lround(header.time/dt_snap);
                     e_init = header.e_init;
                     e_now = header.e_now;
                 }
@@ -397,11 +405,24 @@ int main(int argc, char *argv[])
     calcIndirectTerm(system_grav);
 #endif
 
+
+
+////////////////////
+// GasDrag
 #ifdef GAS_DRAG
-    GasDisk gas_disk;
+    #ifdef GAS_DRAGEX
+        DragForce gas_disk;
+        DiskProperty test;
+        test.Information();
+    #else
+        GasDisk gas_disk;
+    #endif
     gas_disk.calcGasDrag(system_grav, time_sys);
 #endif
-    
+////////////////////
+
+
+
     //////////////////
     /*  File Open   */
     //////////////////
@@ -462,19 +483,19 @@ int main(int argc, char *argv[])
     ///   Loop Start
     while(1){
         
-        PS::S32 n_col = 0;
-        PS::S32 n_frag = 0;
-        PS::S32 n_remove = 0;
+    PS::S32 n_col = 0;
+    PS::S32 n_frag = 0;
+    PS::S32 n_remove = 0;
 #ifdef GAS_DRAG
-        PS::F64 edisp_gd = 0.;
+    PS::F64 edisp_gd = 0.;
 #endif
         
-        n_loc = system_grav.getNumberOfParticleLocal();
+    n_loc = system_grav.getNumberOfParticleLocal();
 
-        PS::Comm::barrier();
-        wtime.start_soft = PS::GetWtime();
+    PS::Comm::barrier();
+    wtime.start_soft = PS::GetWtime();
 #ifdef CALC_WTIME
-        wtime.lap(wtime.start_soft);
+    wtime.lap(wtime.start_soft);
 #endif
 
         ////////////////////
@@ -483,9 +504,17 @@ int main(int argc, char *argv[])
         ///////////////////////////
         /*   1st Velocity kick   */
         ///////////////////////////
+
+
+
+///////////////////////////
+// GasDrag
 #ifdef GAS_DRAG
         correctEnergyForGas(system_grav, edisp_gd, false);
 #endif
+///////////////////////////
+
+
         velKick(system_grav);
 #ifdef OUTPUT_DETAIL
         calcKineticEnergy(system_grav, ekin_before);
@@ -549,7 +578,9 @@ int main(int argc, char *argv[])
 
         system_ex.resize(NList.getNumberOfRankSend(), NList.getNumberOfRankRecv());
 
-            
+
+
+
 #ifdef PARTICLE_SIMULATOR_MPI_PARALLEL
         /////////////////////
         /*   Gather Hard   */
@@ -616,6 +647,10 @@ int main(int argc, char *argv[])
         ///   Hard Part
         ////////////////////              
    
+
+
+
+
         PS::Comm::barrier();
         wtime.end_hard = wtime.start_soft = PS::GetWtime();
         wtime.hard += wtime.hard_step = wtime.end_hard - wtime.start_hard;
@@ -660,9 +695,13 @@ int main(int argc, char *argv[])
         wtime.neighbor_search += wtime.neighbor_search_step = wtime.lap(PS::GetWtime());
 #endif
         
+
+////////////////////
+// GasDrag
 #ifdef GAS_DRAG
         gas_disk.calcGasDrag(system_grav, time_sys+FP_t::dt_tree);
 #endif
+////////////////////
 
         ///////////////////////////
         /*   2nd Velocity kick   */
@@ -675,11 +714,18 @@ int main(int argc, char *argv[])
 #else
         velKick2nd(system_grav);
 #endif
+
+
+////////////////////
+// GasDrag
 #ifdef GAS_DRAG
         correctEnergyForGas(system_grav, edisp_gd, true);
         e_now.edisp += edisp_gd;
 #endif
-        
+////////////////////
+
+
+
         //////////////////////////
         /*   Calculate Energy   */
         //////////////////////////
@@ -757,13 +803,19 @@ int main(int argc, char *argv[])
             wtime.neighbor_search_step += time_tmp;
             wtime.neighbor_search += time_tmp;
 #endif
+
+////////////////////
+// GasDrag
 #ifdef GAS_DRAG
 #pragma omp parallel for
             for(PS::S32 i=0; i<n_loc; i++) system_grav[i].acc += system_grav[i].acc_gd;
 #endif
             e_now.calcEnergy(system_grav);
+////////////////////
         }
    
+
+
         ///   Soft Part
         ////////////////////
 
@@ -786,24 +838,26 @@ int main(int argc, char *argv[])
         PS::F64 de =  e_now.calcEnergyError(e_init);
         PS::F64 de_tmp = sqrt(de*de);
         if( de_tmp > de_max ) de_max = de_tmp;
-        if ( PS::Comm::getRank() == 0 ) {
-            std::cout << std::fixed << std::setprecision(8)
-                      << "Time: " << time_sys
-                      << "  NumberOfParticle: " << n_tot 
-                      << "  NumberOfCol: " << n_col_tot
-                      << "  NumberOfFrag: " << n_frag_tot << std::endl
-                      << std::scientific << std::setprecision(15)
-                      << "                  "
+        if( time_sys  == dt_snap*isnap ){ /* reduce std output */
+            if ( PS::Comm::getRank() == 0 ) {
+                std::cout << std::fixed << std::setprecision(8)
+                        << "Time: " << time_sys
+                        << "  NumberOfParticle: " << n_tot 
+                        << "  NumberOfCol: " << n_col_tot
+                        << "  NumberOfFrag: " << n_frag_tot << std::endl
+                        << std::scientific << std::setprecision(15)
+                        << "                  "
 #ifdef OUTPUT_DETAIL
-                      << "HardEnergyError: " << de_d_cum
-                      << "  "
+                        << "HardEnergyError: " << de_d_cum
+                        << "  "
 #endif
-                      << "EnergyError: " << de
-                      << "  MaxEnergyError: " << de_max << std::endl;
-            
-            //std::cerr << std::scientific<<std::setprecision(15);
-            //PRC(etot1); PRL(ekin);
-            //PRC(ephi); PRC(ephi_s); PRL(ephi_d);
+                        << "EnergyError: " << de
+                        << "  MaxEnergyError: " << de_max << std::endl;
+                
+                //std::cerr << std::scientific<<std::setprecision(15);
+                //PRC(etot1); PRL(ekin);
+                //PRC(ephi); PRC(ephi_s); PRL(ephi_d);
+            }
         }
                 
         if( time_sys  == dt_snap*isnap ){
